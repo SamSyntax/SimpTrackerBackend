@@ -40,55 +40,104 @@ func DatabaseUserStatsByUsernameToUserStatsByUsername(user db.GetCountsPerUserPe
 	}
 }
 
-type GetGlobalKeywordsCount struct {
-	KeywordID  int32  `json:"keyword_id"`
+type GlobalKeywordsType struct {
+	KeywordID  int    `json:"keyword_id"`
 	Keyword    string `json:"keyword"`
-	TotalCount int64  `json:"total_count"`
+	Active     bool   `json:"active"`
+	TotalCount int    `json:"total_count"`
 }
 
-func DatabaseKeywordsToKeywords(keywords []db.GetGlobalKeywordsCountRow) []GetGlobalKeywordsCount {
-	var res []GetGlobalKeywordsCount
-
+func DatabaseKeywordsToKeywords(keywords []db.GetGlobalKeywordsCountPaginatedRow) []GlobalKeywordsType {
+	var res []GlobalKeywordsType
 	for _, keyword := range keywords {
-		res = append(res, GetGlobalKeywordsCount{
+		totalCount := 0
+		if keyword.TotalCount.Valid {
+			totalCount = int(keyword.TotalCount.Int64)
+		}
+		res = append(res, GlobalKeywordsType{
 			Keyword:    keyword.Keyword,
-			KeywordID:  keyword.KeywordID,
-			TotalCount: keyword.TotalCount,
+			KeywordID:  int(keyword.KeywordID),
+			TotalCount: totalCount,
 		})
 	}
 	return res
 }
 
-func DatabaseKeywordsToKeywordsAsc(keywords []db.GetGlobalKeywordsCountAscRow) []GetGlobalKeywordsCount {
-	var res []GetGlobalKeywordsCount
-
+func DatabaseKeywordsToKeywordsAsc(keywords []db.GetGlobalKeywordsCountAscRow) []GlobalKeywordsType {
+	var res []GlobalKeywordsType
 	for _, keyword := range keywords {
-		res = append(res, GetGlobalKeywordsCount{
+		totalCount := 0
+		if keyword.TotalCount.Valid {
+			totalCount = int(keyword.TotalCount.Int64)
+		}
+		res = append(res, GlobalKeywordsType{
 			Keyword:    keyword.Keyword,
-			KeywordID:  keyword.KeywordID,
-			TotalCount: keyword.TotalCount,
+			KeywordID:  int(keyword.KeywordID),
+			TotalCount: totalCount,
 		})
 	}
 	return res
 }
 
-func DatabaseKeywordsToKeywordsDesc(keywords []db.GetGlobalKeywordsCountDescRow) []GetGlobalKeywordsCount {
-	var res []GetGlobalKeywordsCount
-
+func DatabaseKeywordsToKeywordsDesc(keywords []db.GetGlobalKeywordsCountDescRow) []GlobalKeywordsType {
+	var res []GlobalKeywordsType
 	for _, keyword := range keywords {
-		res = append(res, GetGlobalKeywordsCount{
+		totalCount := 0
+		if keyword.TotalCount.Valid {
+			totalCount = int(keyword.TotalCount.Int64)
+		}
+		res = append(res, GlobalKeywordsType{
 			Keyword:    keyword.Keyword,
-			KeywordID:  keyword.KeywordID,
-			TotalCount: keyword.TotalCount,
+			KeywordID:  int(keyword.KeywordID),
+			TotalCount: totalCount,
 		})
 	}
 	return res
 }
 
-func DatabaseKeywordByIdToKeywordById(keyword db.GetKeywordByIdRow) GetGlobalKeywordsCount {
-	return GetGlobalKeywordsCount{
-		KeywordID:  keyword.KeywordID,
+func DatabaseKeywordByIdToKeywordById(keyword db.GetKeywordByIdRow) GlobalKeywordsType {
+	totalCount := 0
+	if keyword.TotalCount.Valid {
+		totalCount = int(keyword.TotalCount.Int64)
+	}
+	return GlobalKeywordsType{
 		Keyword:    keyword.Keyword,
-		TotalCount: keyword.TotalCount,
+		KeywordID:  int(keyword.KeywordID),
+		TotalCount: totalCount,
 	}
+}
+
+func DatabaseKeywordsToKeywordsAscPaginated(rows []db.GetGlobalKeywordsCountAscPaginatedRow) []GlobalKeywordsType {
+	var keywords []GlobalKeywordsType
+	for _, row := range rows {
+		totalCount := 0
+		if row.TotalCount.Valid {
+			totalCount = int(row.TotalCount.Int64)
+		}
+		keywords = append(keywords, GlobalKeywordsType{
+			KeywordID:  int(row.KeywordID),
+			Keyword:    row.Keyword,
+			Active:     row.Active,
+			TotalCount: totalCount,
+		})
+	}
+	return keywords
+}
+
+// Converts descending paginated rows to GlobalKeywordsType
+func DatabaseKeywordsToKeywordsDescPaginated(rows []db.GetGlobalKeywordsCountDescPaginatedRow) []GlobalKeywordsType {
+	var keywords []GlobalKeywordsType
+	for _, row := range rows {
+		totalCount := 0
+		if row.TotalCount.Valid {
+			totalCount = int(row.TotalCount.Int64)
+		}
+		keywords = append(keywords, GlobalKeywordsType{
+			KeywordID:  int(row.KeywordID),
+			Keyword:    row.Keyword,
+			Active:     row.Active,
+			TotalCount: totalCount,
+		})
+	}
+	return keywords
 }

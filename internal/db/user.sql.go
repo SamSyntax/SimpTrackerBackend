@@ -12,25 +12,25 @@ import (
 
 const getCountsPerUserPerKeyword = `-- name: GetCountsPerUserPerKeyword :one
 SELECT
-    u.id AS user_id,
-    u.username,
+  u.id AS user_id,
+  u.username,
   json_build_object(
-    'keywords', json_agg(
-      json_build_object(
-        'keyword_id', k.id,
-        'keyword', k.keyword,
-        'count', um.count
-      )
-      ORDER BY um.count DESC
-    ),
-    'total_count', SUM(um.count),
-    'last_message', um.last_message
+  'keywords', json_agg(
+  json_build_object(
+  'keyword_id', k.id,
+  'keyword', k.keyword,
+  'count', um.count
+  )
+  ORDER BY um.count DESC
+  ),
+  'total_count', SUM(um.count),
+  'last_message', um.last_message
   ) AS stats
 FROM user_messages um
 JOIN users u ON um.user_id = u.id
 JOIN keywords k ON um.keyword_id = k.id
 WHERE u.id = $1
-GROUP BY u.id, u.username
+GROUP BY u.id, u.username, um.last_message
 `
 
 type GetCountsPerUserPerKeywordRow struct {
@@ -48,25 +48,25 @@ func (q *Queries) GetCountsPerUserPerKeyword(ctx context.Context, id int32) (Get
 
 const getCountsPerUserPerKeywordByUsername = `-- name: GetCountsPerUserPerKeywordByUsername :one
 SELECT
-    u.id AS user_id,
-    u.username,
+  u.id AS user_id,
+  u.username,
   json_build_object(
-    'keywords', json_agg(
-      json_build_object(
-        'keyword_id', k.id,
-        'keyword', k.keyword,
-        'count', um.count
-      )
-      ORDER BY um.count DESC
-    ),
-    'total_count', SUM(um.count),
-    'last_message', MIN(um.last_message)
+  'keywords', json_agg(
+  json_build_object(
+  'keyword_id', k.id,
+  'keyword', k.keyword,
+  'count', um.count
+  )
+  ORDER BY um.count DESC
+  ),
+  'total_count', SUM(um.count),
+  'last_message', MIN(um.last_message)
   ) AS stats
 FROM user_messages um
 JOIN users u ON um.user_id = u.id
 JOIN keywords k ON um.keyword_id = k.id
 WHERE u.username = $1
-GROUP BY u.id, u.username
+GROUP BY u.id, u.username, um.last_message
 `
 
 type GetCountsPerUserPerKeywordByUsernameRow struct {
@@ -84,18 +84,18 @@ func (q *Queries) GetCountsPerUserPerKeywordByUsername(ctx context.Context, user
 
 const getUsersWithTotalCounts = `-- name: GetUsersWithTotalCounts :many
 SELECT
-    u.id AS user_id,
-    u.username,
+  u.id AS user_id,
+  u.username,
   json_build_object(
-    'keywords', json_agg(
-      json_build_object(
-        'keyword_id', k.id,
-        'keyword', k.keyword,
-        'count', um.count
-      )
-    ),
-    'total_count', SUM(um.count),
-    'fav_word', 
+  'keywords', json_agg(
+  json_build_object(
+  'keyword_id', k.id,
+  'keyword', k.keyword,
+  'count', um.count
+  )
+  ),
+  'total_count', SUM(um.count),
+  'fav_word', 
   (
     SELECT k2.keyword
     FROM user_messages um2
@@ -103,7 +103,7 @@ SELECT
     WHERE um2.user_id = u.id
     ORDER BY um2.count DESC
     LIMIT 1
-    )
+  )
   ) AS stats
 FROM user_messages um
 JOIN users u ON um.user_id = u.id
@@ -144,7 +144,7 @@ func (q *Queries) GetUsersWithTotalCounts(ctx context.Context) ([]GetUsersWithTo
 const upsertUser = `-- name: UpsertUser :one
 INSERT INTO users (username)
 VALUES ($1)
-ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username
+  ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username
 RETURNING id
 `
 

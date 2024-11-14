@@ -1,4 +1,4 @@
-package internal
+package internal 
 
 import (
 	"context"
@@ -36,10 +36,6 @@ func initDB() {
 		log.Fatalf("Failed to connect to databse: %v", err)
 	}
 
-	if err := conn.Ping(); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
-	}
-
 	queries = db.New(conn)
 	apiCfg = &handlers.ApiConfig{
 		DB: queries,
@@ -55,6 +51,7 @@ func containsKeyword(message string) bool {
 	}
 	return false
 }
+
 
 func extractKeywords(message string) map[string]int32 {
 	message = strings.ToLower(message)
@@ -107,3 +104,4 @@ func storeMessage(message twitch.PrivateMessage) {
 		return
 	}
 }
+
