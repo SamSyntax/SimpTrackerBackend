@@ -33,8 +33,9 @@ func InitRoutes(apiCfg handlers.ApiConfig) http.Handler {
 	v1Router.Get("/users/name/{username}", apiCfg.HandlerGetUserWithStatsByUsername)
 
 	// Keywords
-	v1Router.Get("/keywords", apiCfg.HandlerGetKeywords)
+	v1Router.Get("/keywords", apiCfg.HandlerGetKeywordsParams)
 	v1Router.Get("/keywords/id/{keywordId}", apiCfg.HandlerGetKeywordById)
+	v1Router.Post("/keywords", apiCfg.HandlerAddKeywords)
 
 	// Mounting to the /v1 route
 	router.Mount("/v1", v1Router)

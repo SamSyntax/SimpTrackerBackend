@@ -7,19 +7,357 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
-const getActiveKeywords = `-- name: GetActiveKeywords :many
+const getGlobalKeywordsCount = `-- name: GetGlobalKeywordsCount :many
+SELECT
+  k.id AS keyword_id,
+  k.keyword,
+  k.active,
+  COALESCE(SUM(um.count), 0) AS total_count
+FROM
+  keywords k
+LEFT JOIN
+  user_messages um ON um.keyword_id = k.id
+GROUP BY
+  k.id, k.keyword, k.active
+ORDER BY
+  k.id ASC
+`
+
+type GetGlobalKeywordsCountRow struct {
+	KeywordID  int32         `json:"keyword_id"`
+	Keyword    string        `json:"keyword"`
+	Active     bool          `json:"active"`
+	TotalCount sql.NullInt64 `json:"total_count"`
+}
+
+func (q *Queries) GetGlobalKeywordsCount(ctx context.Context) ([]GetGlobalKeywordsCountRow, error) {
+	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetGlobalKeywordsCountRow
+	for rows.Next() {
+		var i GetGlobalKeywordsCountRow
+		if err := rows.Scan(
+			&i.KeywordID,
+			&i.Keyword,
+			&i.Active,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getGlobalKeywordsCountAsc = `-- name: GetGlobalKeywordsCountAsc :many
+SELECT
+  k.id AS keyword_id,
+  k.keyword,
+  k.active,
+  COALESCE(SUM(um.count), 0) AS total_count
+FROM
+  keywords k
+LEFT JOIN
+  user_messages um ON um.keyword_id = k.id
+GROUP BY
+  k.id, k.keyword, k.active
+ORDER BY
+  total_count ASC
+`
+
+type GetGlobalKeywordsCountAscRow struct {
+	KeywordID  int32         `json:"keyword_id"`
+	Keyword    string        `json:"keyword"`
+	Active     bool          `json:"active"`
+	TotalCount sql.NullInt64 `json:"total_count"`
+}
+
+func (q *Queries) GetGlobalKeywordsCountAsc(ctx context.Context) ([]GetGlobalKeywordsCountAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCountAsc)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetGlobalKeywordsCountAscRow
+	for rows.Next() {
+		var i GetGlobalKeywordsCountAscRow
+		if err := rows.Scan(
+			&i.KeywordID,
+			&i.Keyword,
+			&i.Active,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getGlobalKeywordsCountAscPaginated = `-- name: GetGlobalKeywordsCountAscPaginated :many
+SELECT
+  k.id AS keyword_id,
+  k.keyword,
+  k.active,
+  COALESCE(SUM(um.count), 0) AS total_count
+FROM
+  keywords k
+LEFT JOIN
+  user_messages um ON um.keyword_id = k.id
+GROUP BY
+  k.id, k.keyword, k.active
+ORDER BY
+  total_count ASC
+LIMIT $1 OFFSET $2
+`
+
+type GetGlobalKeywordsCountAscPaginatedParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type GetGlobalKeywordsCountAscPaginatedRow struct {
+	KeywordID  int32         `json:"keyword_id"`
+	Keyword    string        `json:"keyword"`
+	Active     bool          `json:"active"`
+	TotalCount sql.NullInt64 `json:"total_count"`
+}
+
+func (q *Queries) GetGlobalKeywordsCountAscPaginated(ctx context.Context, arg GetGlobalKeywordsCountAscPaginatedParams) ([]GetGlobalKeywordsCountAscPaginatedRow, error) {
+	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCountAscPaginated, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetGlobalKeywordsCountAscPaginatedRow
+	for rows.Next() {
+		var i GetGlobalKeywordsCountAscPaginatedRow
+		if err := rows.Scan(
+			&i.KeywordID,
+			&i.Keyword,
+			&i.Active,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getGlobalKeywordsCountDesc = `-- name: GetGlobalKeywordsCountDesc :many
+SELECT
+  k.id AS keyword_id,
+  k.keyword,
+  k.active,
+  COALESCE(SUM(um.count), 0) AS total_count -- Using COALESCE to handle NULL
+FROM
+  keywords k
+LEFT JOIN
+  user_messages um ON um.keyword_id = k.id
+GROUP BY
+  k.id, k.keyword, k.active
+ORDER BY
+  total_count DESC
+`
+
+type GetGlobalKeywordsCountDescRow struct {
+	KeywordID  int32         `json:"keyword_id"`
+	Keyword    string        `json:"keyword"`
+	Active     bool          `json:"active"`
+	TotalCount sql.NullInt64 `json:"total_count"`
+}
+
+func (q *Queries) GetGlobalKeywordsCountDesc(ctx context.Context) ([]GetGlobalKeywordsCountDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCountDesc)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetGlobalKeywordsCountDescRow
+	for rows.Next() {
+		var i GetGlobalKeywordsCountDescRow
+		if err := rows.Scan(
+			&i.KeywordID,
+			&i.Keyword,
+			&i.Active,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getGlobalKeywordsCountDescPaginated = `-- name: GetGlobalKeywordsCountDescPaginated :many
+SELECT
+  k.id AS keyword_id,
+  k.keyword,
+  k.active,
+  COALESCE(SUM(um.count), 0) AS total_count
+FROM
+  keywords k
+LEFT JOIN
+  user_messages um ON um.keyword_id = k.id
+GROUP BY
+  k.id, k.keyword, k.active
+ORDER BY
+  total_count DESC
+LIMIT $1 OFFSET $2
+`
+
+type GetGlobalKeywordsCountDescPaginatedParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type GetGlobalKeywordsCountDescPaginatedRow struct {
+	KeywordID  int32         `json:"keyword_id"`
+	Keyword    string        `json:"keyword"`
+	Active     bool          `json:"active"`
+	TotalCount sql.NullInt64 `json:"total_count"`
+}
+
+func (q *Queries) GetGlobalKeywordsCountDescPaginated(ctx context.Context, arg GetGlobalKeywordsCountDescPaginatedParams) ([]GetGlobalKeywordsCountDescPaginatedRow, error) {
+	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCountDescPaginated, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetGlobalKeywordsCountDescPaginatedRow
+	for rows.Next() {
+		var i GetGlobalKeywordsCountDescPaginatedRow
+		if err := rows.Scan(
+			&i.KeywordID,
+			&i.Keyword,
+			&i.Active,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getGlobalKeywordsCountPaginated = `-- name: GetGlobalKeywordsCountPaginated :many
+SELECT
+  k.id AS keyword_id,
+  k.keyword,
+  k.active,
+  COALESCE(SUM(um.count), 0) AS total_count
+FROM
+  keywords k
+LEFT JOIN
+  user_messages um ON um.keyword_id = k.id
+GROUP BY
+  k.id, k.keyword, k.active
+ORDER BY
+  k.id ASC
+LIMIT $1 OFFSET $2
+`
+
+type GetGlobalKeywordsCountPaginatedParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type GetGlobalKeywordsCountPaginatedRow struct {
+	KeywordID  int32         `json:"keyword_id"`
+	Keyword    string        `json:"keyword"`
+	Active     bool          `json:"active"`
+	TotalCount sql.NullInt64 `json:"total_count"`
+}
+
+func (q *Queries) GetGlobalKeywordsCountPaginated(ctx context.Context, arg GetGlobalKeywordsCountPaginatedParams) ([]GetGlobalKeywordsCountPaginatedRow, error) {
+	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCountPaginated, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetGlobalKeywordsCountPaginatedRow
+	for rows.Next() {
+		var i GetGlobalKeywordsCountPaginatedRow
+		if err := rows.Scan(
+			&i.KeywordID,
+			&i.Keyword,
+			&i.Active,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getGlobalKeywordsCountTotal = `-- name: GetGlobalKeywordsCountTotal :one
+SELECT COUNT(*) FROM keywords
+`
+
+func (q *Queries) GetGlobalKeywordsCountTotal(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getGlobalKeywordsCountTotal)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getInactiveKeywords = `-- name: GetInactiveKeywords :many
 SELECT
     id,
     keyword,
     active
-FROM keywords
-WHERE active = TRUE
+FROM
+    keywords
+WHERE
+    active = FALSE
 `
 
-func (q *Queries) GetActiveKeywords(ctx context.Context) ([]Keyword, error) {
-	rows, err := q.db.QueryContext(ctx, getActiveKeywords)
+func (q *Queries) GetInactiveKeywords(ctx context.Context) ([]Keyword, error) {
+	rows, err := q.db.QueryContext(ctx, getInactiveKeywords)
 	if err != nil {
 		return nil, err
 	}
@@ -41,148 +379,55 @@ func (q *Queries) GetActiveKeywords(ctx context.Context) ([]Keyword, error) {
 	return items, nil
 }
 
-const getGlobalKeywordsCount = `-- name: GetGlobalKeywordsCount :many
-SELECT
-  k.id as keyword_id,
-  k.keyword,
-  SUM(um.count) AS total_count
-FROM user_messages um
-JOIN keywords k ON um.keyword_id = k.id
-GROUP BY k.id, k.keyword
-ORDER BY k.id ASC
-`
-
-type GetGlobalKeywordsCountRow struct {
-	KeywordID  int32  `json:"keyword_id"`
-	Keyword    string `json:"keyword"`
-	TotalCount int64  `json:"total_count"`
-}
-
-func (q *Queries) GetGlobalKeywordsCount(ctx context.Context) ([]GetGlobalKeywordsCountRow, error) {
-	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCount)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetGlobalKeywordsCountRow
-	for rows.Next() {
-		var i GetGlobalKeywordsCountRow
-		if err := rows.Scan(&i.KeywordID, &i.Keyword, &i.TotalCount); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getGlobalKeywordsCountAsc = `-- name: GetGlobalKeywordsCountAsc :many
-SELECT
-  k.id as keyword_id,
-  k.keyword,
-  SUM(um.count) AS total_count
-FROM user_messages um
-JOIN keywords k ON um.keyword_id = k.id
-GROUP BY k.id, k.keyword
-ORDER BY total_count ASC
-`
-
-type GetGlobalKeywordsCountAscRow struct {
-	KeywordID  int32  `json:"keyword_id"`
-	Keyword    string `json:"keyword"`
-	TotalCount int64  `json:"total_count"`
-}
-
-func (q *Queries) GetGlobalKeywordsCountAsc(ctx context.Context) ([]GetGlobalKeywordsCountAscRow, error) {
-	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCountAsc)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetGlobalKeywordsCountAscRow
-	for rows.Next() {
-		var i GetGlobalKeywordsCountAscRow
-		if err := rows.Scan(&i.KeywordID, &i.Keyword, &i.TotalCount); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getGlobalKeywordsCountDesc = `-- name: GetGlobalKeywordsCountDesc :many
-SELECT
-  k.id as keyword_id,
-  k.keyword,
-  SUM(um.count) AS total_count
-FROM user_messages um
-JOIN keywords k ON um.keyword_id = k.id
-GROUP BY k.id, k.keyword
-ORDER BY total_count DESC
-`
-
-type GetGlobalKeywordsCountDescRow struct {
-	KeywordID  int32  `json:"keyword_id"`
-	Keyword    string `json:"keyword"`
-	TotalCount int64  `json:"total_count"`
-}
-
-func (q *Queries) GetGlobalKeywordsCountDesc(ctx context.Context) ([]GetGlobalKeywordsCountDescRow, error) {
-	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCountDesc)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetGlobalKeywordsCountDescRow
-	for rows.Next() {
-		var i GetGlobalKeywordsCountDescRow
-		if err := rows.Scan(&i.KeywordID, &i.Keyword, &i.TotalCount); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getKeywordById = `-- name: GetKeywordById :one
 SELECT 
-  k.id as keyword_id,
+  k.id AS keyword_id,
   k.keyword,
-  SUM(um.count) AS total_count
-FROM user_messages um
-JOIN keywords k ON um.keyword_id = k.id
-WHERE k.id = $1
-GROUP BY k.id, k.keyword
+  k.active,
+  COALESCE(SUM(um.count), 0) AS total_count
+FROM
+  keywords k
+LEFT JOIN
+  user_messages um ON um.keyword_id = k.id
+WHERE
+  k.id = $1
+GROUP BY
+  k.id, k.keyword, k.active
 `
 
 type GetKeywordByIdRow struct {
-	KeywordID  int32  `json:"keyword_id"`
-	Keyword    string `json:"keyword"`
-	TotalCount int64  `json:"total_count"`
+	KeywordID  int32         `json:"keyword_id"`
+	Keyword    string        `json:"keyword"`
+	Active     bool          `json:"active"`
+	TotalCount sql.NullInt64 `json:"total_count"`
 }
 
 func (q *Queries) GetKeywordById(ctx context.Context, id int32) (GetKeywordByIdRow, error) {
 	row := q.db.QueryRowContext(ctx, getKeywordById, id)
 	var i GetKeywordByIdRow
-	err := row.Scan(&i.KeywordID, &i.Keyword, &i.TotalCount)
+	err := row.Scan(
+		&i.KeywordID,
+		&i.Keyword,
+		&i.Active,
+		&i.TotalCount,
+	)
 	return i, err
+}
+
+const isKeywordActive = `-- name: IsKeywordActive :one
+SELECT
+  active
+FROM
+  keywords
+WHERE
+  id = $1
+`
+
+func (q *Queries) IsKeywordActive(ctx context.Context, id int32) (bool, error) {
+	row := q.db.QueryRowContext(ctx, isKeywordActive, id)
+	var active bool
+	err := row.Scan(&active)
+	return active, err
 }
 
 const upsertKeyword = `-- name: UpsertKeyword :one
