@@ -25,7 +25,7 @@ func (apiCfg *ApiConfig) HandlerGetUserWithStats(w http.ResponseWriter, r *http.
 	if err != nil {
 		utils.RespondWithError(w, 500, fmt.Sprintf("Failed to parse url params: %v", err))
 	}
-	user, err := apiCfg.DB.GetCountsPerUserPerKeyword(r.Context(), int32(correctUserID))
+	user, err := apiCfg.DB.GetCountsPerUserPerKeywordById(r.Context(), int32(correctUserID))
 	if err != nil {
 		utils.RespondWithError(w, 500, fmt.Sprintf("Failed to fetch user from DB: %v", err))
 	}

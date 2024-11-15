@@ -1,4 +1,4 @@
-package internal 
+package internal
 
 import (
 	"context"
@@ -52,7 +52,6 @@ func containsKeyword(message string) bool {
 	return false
 }
 
-
 func extractKeywords(message string) map[string]int32 {
 	message = strings.ToLower(message)
 	keywordCounts := make(map[string]int32)
@@ -104,4 +103,3 @@ func storeMessage(message twitch.PrivateMessage) {
 		return
 	}
 }
-

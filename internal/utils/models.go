@@ -24,7 +24,7 @@ func DatabaseUserToUser(users []db.GetUsersWithTotalCountsRow) []GetUserWithStat
 	return localUsers
 }
 
-func DatabaseUserStatsToUserStats(user db.GetCountsPerUserPerKeywordRow) GetUserWithStats {
+func DatabaseUserStatsToUserStats(user db.GetCountsPerUserPerKeywordByIdRow) GetUserWithStats {
 	return GetUserWithStats{
 		Username: user.Username,
 		UserID:   user.UserID,
