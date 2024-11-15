@@ -414,6 +414,57 @@ func (q *Queries) GetKeywordById(ctx context.Context, id int32) (GetKeywordByIdR
 	return i, err
 }
 
+const getUsedKeywords = `-- name: GetUsedKeywords :many
+SELECT
+  k.id AS keyword_id,
+  k.keyword,
+  k.active,
+  COALESCE(SUM(um.count), 0) AS total_count
+FROM
+  keywords k
+LEFT JOIN
+  user_messages um ON um.keyword_id = k.id
+GROUP BY
+  k.id, k.keyword, k.active
+ORDER BY
+  total_count ASC
+`
+
+type GetUsedKeywordsRow struct {
+	KeywordID  int32         `json:"keyword_id"`
+	Keyword    string        `json:"keyword"`
+	Active     bool          `json:"active"`
+	TotalCount sql.NullInt64 `json:"total_count"`
+}
+
+func (q *Queries) GetUsedKeywords(ctx context.Context) ([]GetUsedKeywordsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUsedKeywords)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUsedKeywordsRow
+	for rows.Next() {
+		var i GetUsedKeywordsRow
+		if err := rows.Scan(
+			&i.KeywordID,
+			&i.Keyword,
+			&i.Active,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const isKeywordActive = `-- name: IsKeywordActive :one
 SELECT
   active
