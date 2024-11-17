@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"stulej-finder/internal/handlers"
+	"stulej-finder/internal/utils"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -14,7 +15,7 @@ func InitRoutes(apiCfg handlers.ApiConfig) http.Handler {
 
 	router.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"https://*", "http://*"},
-		AllowedMethods:   []string{"GET"},
+		AllowedMethods:   []string{"GET", "POST", "DELETE"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: false,
@@ -28,14 +29,18 @@ func InitRoutes(apiCfg handlers.ApiConfig) http.Handler {
 	v1Router.Get("/err", handlers.HandlerErr)
 
 	// Users
-	v1Router.Get("/users", apiCfg.HandlerGetUsers)
-	v1Router.Get("/users/id/{userId}", apiCfg.HandlerGetUserWithStats)
-	v1Router.Get("/users/name/{username}", apiCfg.HandlerGetUserWithStatsByUsername)
+	// v1Router.Get("/users", utils.MiddlewareAuth(apiCfg.HandlerGetUsers))
+	v1Router.Group(func(r chi.Router) {
+		v1Router.Get("/users", utils.MiddlewareAuth(apiCfg.HandlerGetUsers))
+		v1Router.Get("/users/id/{userId}", utils.MiddlewareAuth(apiCfg.HandlerGetUserWithStats))
+		v1Router.Get("/users/name/{username}", utils.MiddlewareAuth(apiCfg.HandlerGetUserWithStatsByUsername))
 
-	// Keywords
-	v1Router.Get("/keywords", apiCfg.HandlerGetKeywordsParams)
-	v1Router.Get("/keywords/id/{keywordId}", apiCfg.HandlerGetKeywordById)
-	v1Router.Post("/keywords", apiCfg.HandlerAddKeywords)
+		// Keywords
+		v1Router.Get("/keywords", utils.MiddlewareAuth(apiCfg.HandlerGetKeywordsParams))
+		v1Router.Get("/keywords/id/{keywordId}", utils.MiddlewareAuth(apiCfg.HandlerGetKeywordById))
+		v1Router.Post("/keywords", utils.MiddlewareAuth(apiCfg.HandlerAddKeywords))
+		v1Router.Delete("/keywords/{id}", utils.MiddlewareAuth(apiCfg.HandlerDeletKeyword))
+	})
 
 	// Mounting to the /v1 route
 	router.Mount("/v1", v1Router)

@@ -4,6 +4,11 @@ VALUES ($1)
 ON CONFLICT (keyword) DO UPDATE SET keyword = EXCLUDED.keyword
 RETURNING id;
 
+-- name: DeleteKeyword :one
+DELETE FROM keywords
+WHERE id = $1
+RETURNING id, keyword;
+
 -- name: GetGlobalKeywordsCountDesc :many
 SELECT
   k.id AS keyword_id,

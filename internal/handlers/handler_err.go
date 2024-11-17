@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-
 	"stulej-finder/internal/utils"
 )
 

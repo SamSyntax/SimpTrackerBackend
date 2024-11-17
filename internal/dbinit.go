@@ -18,14 +18,6 @@ import (
 var (
 	conn     *sql.DB
 	queries  *db.Queries
-	keywords = []string{
-		"kiss", "ruchanie", "randka", "piekna", "slicznotka", "oj", "dupa", "test",
-		"Bogini", "Królowa", "Najpiękniejsza", "Perfekcyjna",
-		"Mmmm", "Chciałbym...", "Jaka dupa", "Można się przytulić?",
-		"On/Ona ma więcej subów", "Dlaczego mnie nie zauważasz?",
-		"Spotkajmy się", "Wiem gdzie mieszkasz", "Nie przestanę cię śledzić",
-		"stopa", "stopki", "Ale cyce", "pizdeczka", "pizda", "pizdunia",
-	}
 	apiCfg *handlers.ApiConfig
 )
 
@@ -42,8 +34,26 @@ func initDB() {
 	}
 }
 
+func GetKeywords() []string {
+	var keywords []string
+	keys, err := apiCfg.DB.GetGlobalKeywordsCount(context.Background())
+	if err != nil {
+		log.Fatalf("Failed to fetch keywords: %v", err)
+	}
+	for _, key := range keys {
+		if key.Active {
+			keywords = append(keywords, key.Keyword)
+		} else {
+			continue
+		}
+	}
+
+	return keywords
+}
+
 func containsKeyword(message string) bool {
 	message = strings.ToLower(message)
+  keywords := GetKeywords()
 	for _, keyword := range keywords {
 		if strings.Contains(message, strings.ToLower(keyword)) {
 			return true
@@ -55,6 +65,7 @@ func containsKeyword(message string) bool {
 func extractKeywords(message string) map[string]int32 {
 	message = strings.ToLower(message)
 	keywordCounts := make(map[string]int32)
+  keywords := GetKeywords()
 	for _, keyword := range keywords {
 		count := int32(strings.Count(message, strings.ToLower(keyword)))
 		if count > 0 {

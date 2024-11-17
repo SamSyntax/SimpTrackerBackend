@@ -18,6 +18,7 @@ SELECT
       ) ORDER BY um.count DESC  -- Ensure keywords are ordered if needed
     ),
     'total_count', SUM(um.count),
+    'last_message', um.last_message,
     'fav_word', 
     (
       SELECT k2.keyword
@@ -32,7 +33,7 @@ FROM users u
 JOIN user_messages um ON um.user_id = u.id
 JOIN keywords k ON um.keyword_id = k.id
 WHERE u.id = $1
-GROUP BY u.id, u.username
+GROUP BY u.id, u.username, um.last_message
 ORDER BY SUM(um.count) DESC;
 
 -- name: GetCountsPerUserPerKeywordByUsername :one
@@ -48,6 +49,7 @@ SELECT
       ) ORDER BY um.count DESC  -- Ensure keywords are ordered if needed
     ),
     'total_count', SUM(um.count),
+    'last_message', um.last_message,
     'fav_word', 
     (
       SELECT k2.keyword
@@ -62,7 +64,7 @@ FROM users u
 JOIN user_messages um ON um.user_id = u.id
 JOIN keywords k ON um.keyword_id = k.id
 WHERE u.username = $1
-GROUP BY u.id, u.username
+GROUP BY u.id, u.username, um.last_message
 ORDER BY SUM(um.count) DESC;
 
 -- name: GetUsersWithTotalCounts :many
@@ -78,6 +80,7 @@ SELECT
   )
   ),
   'total_count', SUM(um.count),
+  'last_message', um.last_message,
   'fav_word', 
   (
     SELECT k2.keyword
@@ -91,5 +94,5 @@ SELECT
 FROM user_messages um
 JOIN users u ON um.user_id = u.id
 JOIN keywords k ON um.keyword_id = k.id
-GROUP BY u.id, u.username
+GROUP BY u.id, u.username, um.last_message
 ORDER BY SUM(um.count) DESC;

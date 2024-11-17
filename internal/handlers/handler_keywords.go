@@ -123,36 +123,6 @@ func (apiCfg *ApiConfig) HandlerGetKeywordsParams(w http.ResponseWriter, r *http
 	utils.RespondWithJSON(w, http.StatusOK, response)
 }
 
-// func (apiCfg *ApiConfig) HandlerGetKeywords(w http.ResponseWriter, r *http.Request) {
-// 	order := r.URL.Query().Get("order")
-// 	if order == "" {
-// 		keywords, err := apiCfg.DB.GetGlobalKeywordsCount(r.Context())
-// 		if err != nil {
-// 			utils.RespondWithError(w, 500, fmt.Sprintf("Couldn't fetch keywords %v", err))
-// 			return
-// 		}
-// 		utils.RespondWithJSON(w, 201, utils.DatabaseKeywordsToKeywords(keywords))
-// 	} else if strings.ToLower(order) == "asc" {
-// 		keywords, err := apiCfg.DB.GetGlobalKeywordsCountAsc(r.Context())
-// 		if err != nil {
-// 			utils.RespondWithError(w, 500, fmt.Sprintf("Couldn't fetch keywords %v", err))
-// 			return
-// 		}
-// 		utils.RespondWithJSON(w, 201, utils.DatabaseKeywordsToKeywordsAsc(keywords))
-// 	} else if strings.ToLower(order) == "desc" {
-
-// 		keywords, err := apiCfg.DB.GetGlobalKeywordsCountDesc(r.Context())
-// 		if err != nil {
-// 			utils.RespondWithError(w, 500, fmt.Sprintf("Couldn't fetch keywords %v", err))
-// 			return
-// 		}
-// 		utils.RespondWithJSON(w, 201, utils.DatabaseKeywordsToKeywordsDesc(keywords))
-// 	} else {
-// 		utils.RespondWithError(w, 500, fmt.Sprintf("Invalid order query param %s", order))
-// 		return
-// 	}
-// }
-
 func (apiCfg *ApiConfig) HandlerGetKeywordById(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "keywordId")
 
@@ -226,4 +196,18 @@ func (apiCfg *ApiConfig) HandlerAddKeywords(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	utils.RespondWithJSON(w, http.StatusCreated, addedKeywords)
+}
+
+func (apiCfg *ApiConfig) HandlerDeletKeyword(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		utils.RespondWithError(w, 500, fmt.Sprintf("Failed to parse id from url params %v", err))
+		return
+	}
+	keyword, err := apiCfg.DB.DeleteKeyword(r.Context(), int32(id))
+	if err != nil {
+		utils.RespondWithError(w, 500, fmt.Sprintf("Failed to delete keyword %v", err))
+		return
+	}
+	utils.RespondWithJSON(w, http.StatusOK, keyword)
 }

@@ -10,6 +10,24 @@ import (
 	"database/sql"
 )
 
+const deleteKeyword = `-- name: DeleteKeyword :one
+DELETE FROM keywords
+WHERE id = $1
+RETURNING id, keyword
+`
+
+type DeleteKeywordRow struct {
+	ID      int32  `json:"id"`
+	Keyword string `json:"keyword"`
+}
+
+func (q *Queries) DeleteKeyword(ctx context.Context, id int32) (DeleteKeywordRow, error) {
+	row := q.db.QueryRowContext(ctx, deleteKeyword, id)
+	var i DeleteKeywordRow
+	err := row.Scan(&i.ID, &i.Keyword)
+	return i, err
+}
+
 const getGlobalKeywordsCount = `-- name: GetGlobalKeywordsCount :many
 SELECT
   k.id AS keyword_id,
