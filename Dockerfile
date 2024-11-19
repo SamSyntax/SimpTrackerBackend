@@ -5,8 +5,9 @@ FROM golang:1.23-alpine
 WORKDIR /app
 
 # Copy go.mod and go.sum, then download dependencies
+
 COPY go.mod go.sum ./
-RUN go mod download
+RUN go mod download && apk add curl
 
 # Copy the application code
 COPY . .
