@@ -40,7 +40,7 @@ func InitRoutes(apiCfg handlers.ApiConfig) http.Handler {
 		v1Router.Get("/keywords/id/{keywordId}", utils.MiddlewareAuth(apiCfg.HandlerGetKeywordById))
 		v1Router.Post("/keywords", utils.MiddlewareAuth(apiCfg.HandlerAddKeywords))
 		v1Router.Delete("/keywords/{id}", utils.MiddlewareAuth(apiCfg.HandlerDeletKeyword))
-    v1Router.HandleFunc("/ws", utils.MiddlewareAuth(handlers.WsHandler))
+    v1Router.HandleFunc("/ws", handlers.WsHandler)
 
     // Websocket
 	})

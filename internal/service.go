@@ -23,7 +23,7 @@ func Service() {
 	}
 	clientID := os.Getenv("CLIENT_ID")
 	accessToken := os.Getenv("ACCESS_TOKEN")
-	streamerName := "karolynkaa"
+	streamerName := "soserioussammyxd"
 
 	initDB()
 	defer conn.Close()

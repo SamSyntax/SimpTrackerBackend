@@ -6,8 +6,12 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"sync"
 	"time"
+
+	"stulej-finder/internal/utils"
 
 	"github.com/gorilla/websocket"
 )
@@ -24,7 +28,14 @@ type StreamResponse struct {
 }
 
 var (
-	upgrader     = websocket.Upgrader{}
+	allowedOrigins = map[string]bool{
+		"https://simptracker.framed-designs.com": true,
+		"http://localhost:3001":                  true,
+	}
+	upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		return allowedOrigins[origin]
+	}}
 	clients      = make(map[*websocket.Conn]bool)
 	clientsMutex sync.Mutex
 )
@@ -83,6 +94,22 @@ func broadcastMessage(message string) {
 }
 
 func WsHandler(w http.ResponseWriter, r *http.Request) {
+	rawKey := r.URL.Query().Get("apiKey")
+	decodedKey, err := url.QueryUnescape(rawKey)
+	correctedKey := strings.ReplaceAll(decodedKey, " ", "+")
+	log.Print(correctedKey)
+	if err != nil {
+		utils.RespondWithError(w, 401, "Failed to decode ApiKey")
+		return
+	}
+	if len(rawKey) == 0 || len(correctedKey) == 0 || len(decodedKey) == 0 {
+		utils.RespondWithError(w, 401, "ApiKey can't be empty")
+		return
+	}
+	if string(correctedKey) != os.Getenv("API_KEY") {
+		utils.RespondWithError(w, 401, "Invalid ApiKey")
+		return
+	}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("Websocket upgrade error: %v", err)
@@ -117,7 +144,7 @@ func StartWsServer(clientID, accessToken, streamerName string) {
 				time.Sleep(5 * time.Second)
 				continue
 			}
-			message := fmt.Sprintf("The stream for %s is %s", streamerName, map[bool]string{true: "LIVE", false: "OFFLINE"}[isLive])
+			message := map[bool]string{true: "LIVE", false: "OFFLINE"}[isLive]
 			log.Println(message)
 			broadcastMessage(message)
 			time.Sleep(5 * time.Second)
