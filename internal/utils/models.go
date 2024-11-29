@@ -58,7 +58,7 @@ func DatabaseKeywordsToKeywords(keywords []db.GetGlobalKeywordsCountPaginatedRow
 			Keyword:    keyword.Keyword,
 			KeywordID:  int(keyword.KeywordID),
 			TotalCount: totalCount,
-      Active: keyword.Active,
+			Active:     keyword.Active,
 		})
 	}
 	return res
@@ -75,7 +75,7 @@ func DatabaseKeywordsToKeywordsAsc(keywords []db.GetGlobalKeywordsCountAscRow) [
 			Keyword:    keyword.Keyword,
 			KeywordID:  int(keyword.KeywordID),
 			TotalCount: totalCount,
-      Active: keyword.Active,
+			Active:     keyword.Active,
 		})
 	}
 	return res
@@ -91,8 +91,25 @@ func DatabaseKeywordsToKeywordsDesc(keywords []db.GetGlobalKeywordsCountDescRow)
 		res = append(res, GlobalKeywordsType{
 			Keyword:    keyword.Keyword,
 			KeywordID:  int(keyword.KeywordID),
-      Active: keyword.Active,
+			Active:     keyword.Active,
 			TotalCount: totalCount,
+		})
+	}
+	return res
+}
+
+func DatabaseKeywordsToKeywordsDefault(keywords []db.GetKeywordsByStreamerRow) []GlobalKeywordsType {
+	var res []GlobalKeywordsType
+	for _, keyword := range keywords {
+		totalCount := 0
+		if keyword.TotalCount.Valid {
+			totalCount = int(keyword.TotalCount.Int64)
+		}
+		res = append(res, GlobalKeywordsType{
+			Keyword:    keyword.Keyword,
+			KeywordID:  int(keyword.KeywordID),
+			TotalCount: totalCount,
+			Active:     keyword.Active,
 		})
 	}
 	return res

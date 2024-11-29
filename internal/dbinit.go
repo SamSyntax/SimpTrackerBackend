@@ -16,16 +16,17 @@ import (
 )
 
 var (
-	conn     *sql.DB
-	queries  *db.Queries
-	apiCfg *handlers.ApiConfig
+	conn    *sql.DB
+	queries *db.Queries
+	apiCfg  *handlers.ApiConfig
 )
 
+// Initialize the database connection and queries
 func initDB() {
 	var err error
-	conn, err := sql.Open("postgres", os.Getenv("DB_URL"))
+	conn, err = sql.Open("postgres", os.Getenv("DB_URL"))
 	if err != nil {
-		log.Fatalf("Failed to connect to databse: %v", err)
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
 	queries = db.New(conn)
@@ -34,26 +35,33 @@ func initDB() {
 	}
 }
 
-func GetKeywords() []string {
+// Get active keywords for a specific streamer
+func GetKeywordsForStreamer(streamerID int32) []string {
 	var keywords []string
-	keys, err := apiCfg.DB.GetGlobalKeywordsCount(context.Background())
-	if err != nil {
-		log.Fatalf("Failed to fetch keywords: %v", err)
+	ctx := context.Background()
+
+	// Fetch keywords specifically for the streamer
+	params := db.GetKeywordsByStreamerParams{
+		StreamerID: sql.NullInt32{Int32: streamerID, Valid: true},
 	}
+	keys, err := apiCfg.DB.GetKeywordsByStreamer(ctx, params)
+	if err != nil {
+		log.Printf("Failed to fetch keywords for streamer %d: %v", streamerID, err)
+		return keywords
+	}
+
 	for _, key := range keys {
 		if key.Active {
 			keywords = append(keywords, key.Keyword)
-		} else {
-			continue
 		}
 	}
-
 	return keywords
 }
 
-func containsKeyword(message string) bool {
+// Check if a message contains any of the streamer's keywords
+func containsKeywordForStreamer(message string, streamerID int32) bool {
 	message = strings.ToLower(message)
-  keywords := GetKeywords()
+	keywords := GetKeywordsForStreamer(streamerID)
 	for _, keyword := range keywords {
 		if strings.Contains(message, strings.ToLower(keyword)) {
 			return true
@@ -62,10 +70,11 @@ func containsKeyword(message string) bool {
 	return false
 }
 
-func extractKeywords(message string) map[string]int32 {
+// Extract keywords from a message for a specific streamer
+func extractKeywordsForStreamer(message string, streamerID int32) map[string]int32 {
 	message = strings.ToLower(message)
 	keywordCounts := make(map[string]int32)
-  keywords := GetKeywords()
+	keywords := GetKeywordsForStreamer(streamerID)
 	for _, keyword := range keywords {
 		count := int32(strings.Count(message, strings.ToLower(keyword)))
 		if count > 0 {
@@ -75,42 +84,48 @@ func extractKeywords(message string) map[string]int32 {
 	return keywordCounts
 }
 
-func storeMessage(message twitch.PrivateMessage) {
+// Store a Twitch message in the database
+func storeMessageForStreamer(message twitch.PrivateMessage, streamerID int32) {
 	ctx := context.Background()
 
-	if !containsKeyword(message.Message) {
+	// Skip processing if the message doesn't contain any keywords
+	if !containsKeywordForStreamer(message.Message, streamerID) {
 		return
 	}
+
+	// Upsert the user
 	userID, err := queries.UpsertUser(ctx, message.User.DisplayName)
 	if err != nil {
 		log.Printf("Error upserting user: %v\n", err)
 		return
 	}
 
-	keywords := extractKeywords(message.Message)
-	for keyword, count := range keywords {
-		keywordID, err := queries.UpsertKeyword(ctx, keyword)
+	// Extract and store keywords
+	keywords := extractKeywordsForStreamer(message.Message, streamerID)
+	for keyword := range keywords {
+		keywordID, err := queries.UpsertKeyword(ctx, db.UpsertKeywordParams{
+			StreamerID: streamerID,
+			Keyword:    keyword,
+		})
 		if err != nil {
 			log.Printf("Error upserting keyword: %v\n", err)
 			continue
 		}
 
+		// Upsert the user message with the `streamer_id`
 		err = queries.UpsertUserMessage(ctx, db.UpsertUserMessageParams{
 			UserID:      sql.NullInt32{Int32: userID, Valid: true},
 			KeywordID:   sql.NullInt32{Int32: keywordID, Valid: true},
+			StreamerID:  sql.NullInt32{Int32: streamerID, Valid: true},
 			LastMessage: sql.NullString{String: message.Message, Valid: true},
-			Count:       sql.NullInt32{Int32: count, Valid: true},
 		})
 		if err != nil {
-			log.Printf("Error upserting message %v\n", err)
+			log.Printf("Error upserting message: %v\n", err)
 			continue
 		}
 	}
+
 	if len(keywords) == 0 {
-		return
-	}
-	if err != nil {
-		log.Printf("Error upserting keyword: %v\n", err)
-		return
+		log.Printf("No keywords matched for message: %s", message.Message)
 	}
 }

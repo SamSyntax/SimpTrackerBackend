@@ -1,13 +1,14 @@
 package internal
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"stulej-finder/internal/handlers"
-
-	// "stulej-finder/internal/handlers"
 
 	v1 "stulej-finder/internal/v1"
 
@@ -21,17 +22,15 @@ func Service() {
 	if err != nil {
 		log.Fatalf("Failed to load environment variables %v", err)
 	}
-	clientID := os.Getenv("CLIENT_ID")
-	accessToken := os.Getenv("ACCESS_TOKEN")
-	streamerName := "soserioussammyxd"
-
 	initDB()
 	defer conn.Close()
-	client := twitch.NewAnonymousClient()
+  fmt.Println(os.Getenv("BOT_USERNAME"), os.Getenv("TWITCH_OAUTH"))
+  client := twitch.NewClient(os.Getenv("BOT_USERNAME"), "oauth:"+os.Getenv("ACCESS_TOKEN"))
 	var portString string = os.Getenv("PORT")
 
-	go handlers.StartWsServer(clientID, accessToken, streamerName)
-  routes := v1.InitRoutes(*apiCfg)
+	go handlers.StartWsServer(os.Getenv("CLIENT_ID"), os.Getenv("ACCESS_TOKEN"), "")
+
+	routes := v1.InitRoutes(*apiCfg)
 	go func() {
 		log.Printf("Server starting on port %v\n", portString)
 		srv := &http.Server{
@@ -40,18 +39,48 @@ func Service() {
 		}
 		log.Fatal(srv.ListenAndServe())
 	}()
-	client.Join(streamerName)
 
+	monitorStreamer(client)
 	client.OnPrivateMessage(func(msg twitch.PrivateMessage) {
+		// Fetch the streamer_id based on the channel
+		streamer, err := queries.GetStreamerByTwitchID(context.Background(), msg.Channel)
+		if err != nil {
+			log.Printf("Error fetching streamer for channel %s: %v", msg.Channel, err)
+			return
+		}
+
+		// Skip messages from StreamElements bot
 		if msg.User.DisplayName == "StreamElements" {
 			return
 		}
-		storeMessage(msg)
-		log.Printf("%s: %s", msg.User.DisplayName, msg.Message)
+
+		// Store the message for the specific streamer
+		storeMessageForStreamer(msg, streamer.ID)
+		log.Printf("[%s] %s: %s", msg.Channel, msg.User.DisplayName, msg.Message)
 	})
 
+	// Connect to Twitch
 	err = client.Connect()
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func monitorStreamer(client *twitch.Client) {
+	go func() {
+		for {
+			streamers, err := queries.GetStreamers(context.Background())
+			if err != nil {
+				log.Printf("Error fetching streamers: %v", err)
+				time.Sleep(1 * time.Minute)
+				continue
+			}
+
+			for _, streamer := range streamers {
+				client.Join(streamer.Username)
+				log.Printf("Joined channel: %s", streamer.Username)
+			}
+			time.Sleep(5 * time.Minute)
+		}
+	}()
 }

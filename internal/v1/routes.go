@@ -27,6 +27,8 @@ func InitRoutes(apiCfg handlers.ApiConfig) http.Handler {
 	// Routes
 	v1Router.Get("/healthz", handlers.HandlerReadiness)
 	v1Router.Get("/err", handlers.HandlerErr)
+	v1Router.Get("/auth/redirect", apiCfg.HandlerAuthRedirect)
+	v1Router.Get("/auth/callback", apiCfg.HandlerAuthCallback)
 
 	// Users
 	// v1Router.Get("/users", utils.MiddlewareAuth(apiCfg.HandlerGetUsers))
@@ -39,10 +41,11 @@ func InitRoutes(apiCfg handlers.ApiConfig) http.Handler {
 		v1Router.Get("/keywords", utils.MiddlewareAuth(apiCfg.HandlerGetKeywordsParams))
 		v1Router.Get("/keywords/id/{keywordId}", utils.MiddlewareAuth(apiCfg.HandlerGetKeywordById))
 		v1Router.Post("/keywords", utils.MiddlewareAuth(apiCfg.HandlerAddKeywords))
-		v1Router.Delete("/keywords/{id}", utils.MiddlewareAuth(apiCfg.HandlerDeletKeyword))
-    v1Router.HandleFunc("/ws", handlers.WsHandler)
+		v1Router.Delete("/keywords/{id}", utils.MiddlewareAuth(apiCfg.HandlerDeleteKeyword))
+		v1Router.Get("/keywords/active", utils.MiddlewareAuth(apiCfg.HandlerGetActiveKeywords))
+		v1Router.HandleFunc("/ws", handlers.WsHandler)
 
-    // Websocket
+		// Websocket
 	})
 
 	// Mounting to the /v1 route

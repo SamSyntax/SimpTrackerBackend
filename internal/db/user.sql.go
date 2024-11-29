@@ -7,10 +7,11 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 )
 
-const getCountsPerUserPerKeywordById = `-- name: GetCountsPerUserPerKeywordById :one
+const getCountsPerUserPerKeywordByStreamer = `-- name: GetCountsPerUserPerKeywordByStreamer :many
 SELECT
   u.id AS user_id,
   u.username,
@@ -20,16 +21,16 @@ SELECT
         'keyword_id', k.id,
         'keyword', k.keyword,
         'count', um.count
-      ) ORDER BY um.count DESC  -- Ensure keywords are ordered if needed
+      )
     ),
     'total_count', SUM(um.count),
-    'last_message', um.last_message,
+    'last_message', MAX(um.last_message),
     'fav_word', 
     (
       SELECT k2.keyword
       FROM user_messages um2
       JOIN keywords k2 ON um2.keyword_id = k2.id
-      WHERE um2.user_id = u.id
+      WHERE um2.user_id = u.id AND um2.streamer_id = $1
       ORDER BY um2.count DESC
       LIMIT 1
     )
@@ -37,22 +38,38 @@ SELECT
 FROM users u
 JOIN user_messages um ON um.user_id = u.id
 JOIN keywords k ON um.keyword_id = k.id
-WHERE u.id = $1
-GROUP BY u.id, u.username, um.last_message
+WHERE um.streamer_id = $1
+GROUP BY u.id, u.username
 ORDER BY SUM(um.count) DESC
 `
 
-type GetCountsPerUserPerKeywordByIdRow struct {
+type GetCountsPerUserPerKeywordByStreamerRow struct {
 	UserID   int32           `json:"user_id"`
 	Username string          `json:"username"`
 	Stats    json.RawMessage `json:"stats"`
 }
 
-func (q *Queries) GetCountsPerUserPerKeywordById(ctx context.Context, id int32) (GetCountsPerUserPerKeywordByIdRow, error) {
-	row := q.db.QueryRowContext(ctx, getCountsPerUserPerKeywordById, id)
-	var i GetCountsPerUserPerKeywordByIdRow
-	err := row.Scan(&i.UserID, &i.Username, &i.Stats)
-	return i, err
+func (q *Queries) GetCountsPerUserPerKeywordByStreamer(ctx context.Context, streamerID sql.NullInt32) ([]GetCountsPerUserPerKeywordByStreamerRow, error) {
+	rows, err := q.db.QueryContext(ctx, getCountsPerUserPerKeywordByStreamer, streamerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetCountsPerUserPerKeywordByStreamerRow
+	for rows.Next() {
+		var i GetCountsPerUserPerKeywordByStreamerRow
+		if err := rows.Scan(&i.UserID, &i.Username, &i.Stats); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getCountsPerUserPerKeywordByUsername = `-- name: GetCountsPerUserPerKeywordByUsername :one
@@ -65,10 +82,10 @@ SELECT
         'keyword_id', k.id,
         'keyword', k.keyword,
         'count', um.count
-      ) ORDER BY um.count DESC  -- Ensure keywords are ordered if needed
+      )
     ),
     'total_count', SUM(um.count),
-    'last_message', um.last_message,
+    'last_message', MAX(um.last_message),
     'fav_word', 
     (
       SELECT k2.keyword
@@ -83,8 +100,7 @@ FROM users u
 JOIN user_messages um ON um.user_id = u.id
 JOIN keywords k ON um.keyword_id = k.id
 WHERE u.username = $1
-GROUP BY u.id, u.username, um.last_message
-ORDER BY SUM(um.count) DESC
+GROUP BY u.id, u.username
 `
 
 type GetCountsPerUserPerKeywordByUsernameRow struct {
@@ -105,29 +121,29 @@ SELECT
   u.id AS user_id,
   u.username,
   json_build_object(
-  'keywords', json_agg(
-  json_build_object(
-  'keyword_id', k.id,
-  'keyword', k.keyword,
-  'count', um.count
-  )
-  ),
-  'total_count', SUM(um.count),
-  'last_message', um.last_message,
-  'fav_word', 
-  (
-    SELECT k2.keyword
-    FROM user_messages um2
-    JOIN keywords k2 ON um2.keyword_id = k2.id
-    WHERE um2.user_id = u.id
-    ORDER BY um2.count DESC
-    LIMIT 1
-  )
+    'keywords', json_agg(
+      json_build_object(
+        'keyword_id', k.id,
+        'keyword', k.keyword,
+        'count', um.count
+      )
+    ),
+    'total_count', SUM(um.count),
+    'last_message', MAX(um.last_message),
+    'fav_word', 
+    (
+      SELECT k2.keyword
+      FROM user_messages um2
+      JOIN keywords k2 ON um2.keyword_id = k2.id
+      WHERE um2.user_id = u.id
+      ORDER BY um2.count DESC
+      LIMIT 1
+    )
   ) AS stats
-FROM user_messages um
-JOIN users u ON um.user_id = u.id
+FROM users u
+JOIN user_messages um ON um.user_id = u.id
 JOIN keywords k ON um.keyword_id = k.id
-GROUP BY u.id, u.username, um.last_message
+GROUP BY u.id, u.username
 ORDER BY SUM(um.count) DESC
 `
 
@@ -163,7 +179,7 @@ func (q *Queries) GetUsersWithTotalCounts(ctx context.Context) ([]GetUsersWithTo
 const upsertUser = `-- name: UpsertUser :one
 INSERT INTO users (username)
 VALUES ($1)
-  ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username
+ON CONFLICT (username) DO NOTHING
 RETURNING id
 `
 

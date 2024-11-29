@@ -6,12 +6,25 @@ package db
 
 import (
 	"database/sql"
+	"time"
 )
 
 type Keyword struct {
-	ID      int32  `json:"id"`
-	Keyword string `json:"keyword"`
-	Active  bool   `json:"active"`
+	ID         int32  `json:"id"`
+	StreamerID int32  `json:"streamer_id"`
+	Keyword    string `json:"keyword"`
+	Active     bool   `json:"active"`
+}
+
+type Streamer struct {
+	ID           int32        `json:"id"`
+	TwitchID     string       `json:"twitch_id"`
+	Username     string       `json:"username"`
+	AccessToken  string       `json:"access_token"`
+	RefreshToken string       `json:"refresh_token"`
+	ExpiresAt    time.Time    `json:"expires_at"`
+	CreatedAt    sql.NullTime `json:"created_at"`
+	UpdatedAt    sql.NullTime `json:"updated_at"`
 }
 
 type User struct {
@@ -23,7 +36,9 @@ type UserMessage struct {
 	ID          int32          `json:"id"`
 	UserID      sql.NullInt32  `json:"user_id"`
 	KeywordID   sql.NullInt32  `json:"keyword_id"`
+	StreamerID  sql.NullInt32  `json:"streamer_id"`
 	Count       sql.NullInt32  `json:"count"`
 	LastMessage sql.NullString `json:"last_message"`
 	UpdatedAt   sql.NullTime   `json:"updated_at"`
+	MessageDate time.Time      `json:"message_date"`
 }

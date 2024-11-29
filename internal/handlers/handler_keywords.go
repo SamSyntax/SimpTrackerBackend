@@ -1,78 +1,111 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"stulej-finder/internal/db"
 	"stulej-finder/internal/utils"
-
-	"github.com/go-chi/chi/v5"
 )
 
+// Fetch active keywords for a specific streamer
+func (apiCfg *ApiConfig) HandlerGetActiveKeywords(w http.ResponseWriter, r *http.Request) {
+	streamerID, err := parseStreamerID(r)
+	if err != nil {
+		utils.RespondWithError(w, http.StatusBadRequest, fmt.Sprintf("Invalid streamer ID: %v", err))
+		return
+	}
+
+	keywords, err := apiCfg.DB.GetKeywordsByStreamer(r.Context(), db.GetKeywordsByStreamerParams{
+		StreamerID: sql.NullInt32{Int32: streamerID, Valid: true},
+	})
+	if err != nil {
+		utils.RespondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Couldn't fetch keywords: %v", err))
+		return
+	}
+
+	activeKeywords := []db.GetKeywordsByStreamerRow{}
+	for _, keyword := range keywords {
+		if keyword.TotalCount.Int64 > 0 {
+			activeKeywords = append(activeKeywords, keyword)
+		}
+	}
+
+	utils.RespondWithJSON(w, http.StatusOK, utils.DatabaseKeywordsToKeywordsDefault(activeKeywords))
+}
+
+// Fetch keywords with query parameters (supports filtering by streamer and date range)
 func (apiCfg *ApiConfig) HandlerGetKeywordsParams(w http.ResponseWriter, r *http.Request) {
-	// Parse query parameters
+	streamerID, err := parseStreamerID(r)
+	if err != nil {
+		fmt.Println(streamerID)
+		utils.RespondWithError(w, http.StatusBadRequest, fmt.Sprintf("Invalid streamer ID: %v", err))
+		return
+	}
+
 	order := strings.ToLower(r.URL.Query().Get("order"))
 	if order != "asc" && order != "desc" && order != "" {
-		// Set default order if invalid or not provided
-		order = "asc"
+		order = "asc" // Default order
 	}
 
-	// Parse 'limit' parameter
-	limitStr := r.URL.Query().Get("limit")
-	limit := 1000 // default limit
-	if limitStr != "" {
-		parsedLimit, err := strconv.Atoi(limitStr)
-		if err != nil || parsedLimit <= 0 {
-			utils.RespondWithError(w, http.StatusBadRequest, "Invalid 'limit' parameter")
-			return
-		}
-		// Set a maximum limit to prevent abuse
-		if parsedLimit > 100 {
-			limit = 100
-		} else {
-			limit = parsedLimit
-		}
+	startStr := r.URL.Query().Get("start")
+	endStr := r.URL.Query().Get("end")
+	active := r.URL.Query().Get("active")
+
+	if startStr == "" {
+		startStr = "2023-01-01" // Default start date
+	}
+	if endStr == "" {
+		endStr = time.Now().Format("2006-01-02") // Default to today
 	}
 
-	// Parse 'offset' parameter
-	offsetStr := r.URL.Query().Get("offset")
-	offset := 0 // default offset
-	if offsetStr != "" {
-		parsedOffset, err := strconv.Atoi(offsetStr)
-		if err != nil || parsedOffset < 0 {
-			utils.RespondWithError(w, http.StatusBadRequest, "Invalid 'offset' parameter")
-			return
-		}
-		offset = parsedOffset
+	startDate, err := time.Parse("2006-01-02", startStr)
+	if err != nil {
+		utils.RespondWithError(w, http.StatusBadRequest, "Invalid 'start' date format. Use YYYY-MM-DD.")
+		return
+	}
+	endDate, err := time.Parse("2006-01-02", endStr)
+	if err != nil {
+		utils.RespondWithError(w, http.StatusBadRequest, "Invalid 'end' date format. Use YYYY-MM-DD.")
+		return
+	}
+	if startDate.After(endDate) {
+		utils.RespondWithError(w, http.StatusBadRequest, "'start' date must be before 'end' date.")
+		return
 	}
 
-	// Fetch data based on order
+	limit, offset, err := parsePagination(r)
+	if err != nil {
+		utils.RespondWithError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Fetch data based on query parameters
 	var keywords interface{}
-	var err error
-
 	switch order {
 	case "asc":
 		keywords, err = apiCfg.DB.GetGlobalKeywordsCountAscPaginated(r.Context(), db.GetGlobalKeywordsCountAscPaginatedParams{
-			Limit:  int32(limit),
-			Offset: int32(offset),
+			MessageDate:   startDate,
+			MessageDate_2: endDate,
+			Limit:         int32(limit),
+			Offset:        int32(offset),
+			StreamerID:    utils.NullishInt32(streamerID),
 		})
 	case "desc":
 		keywords, err = apiCfg.DB.GetGlobalKeywordsCountDescPaginated(r.Context(), db.GetGlobalKeywordsCountDescPaginatedParams{
-			Limit:  int32(limit),
-			Offset: int32(offset),
-		})
-	case "":
-		keywords, err = apiCfg.DB.GetGlobalKeywordsCountPaginated(r.Context(), db.GetGlobalKeywordsCountPaginatedParams{
-			Limit:  int32(limit),
-			Offset: int32(offset),
+			MessageDate:   startDate,
+			MessageDate_2: endDate,
+			Limit:         int32(limit),
+			Offset:        int32(offset),
+			StreamerID:    utils.NullishInt32(streamerID),
 		})
 	default:
-		// This case should not occur due to earlier validation, but added for safety
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid 'order' parameter")
 		return
 	}
@@ -82,49 +115,77 @@ func (apiCfg *ApiConfig) HandlerGetKeywordsParams(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Get total count using the correct method
-	totalCount, err := apiCfg.DB.GetGlobalKeywordsCountTotal(r.Context())
-	if err != nil {
-		utils.RespondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Couldn't fetch total count: %v", err))
-		return
-	}
-
-	// Calculate pagination metadata
-	totalPages := int((int32(totalCount) + int32(limit) - 1) / int32(limit)) // Ceiling division
-	currentPage := int((offset / limit) + 1)
-	hasNext := currentPage < totalPages
-	hasPrev := currentPage > 1
-
 	// Convert DB keywords to response format
 	var responseData []utils.GlobalKeywordsType
-
 	switch kw := keywords.(type) {
 	case []db.GetGlobalKeywordsCountAscPaginatedRow:
 		responseData = utils.DatabaseKeywordsToKeywordsAscPaginated(kw)
 	case []db.GetGlobalKeywordsCountDescPaginatedRow:
 		responseData = utils.DatabaseKeywordsToKeywordsDescPaginated(kw)
-	case []db.GetGlobalKeywordsCountPaginatedRow:
-		responseData = utils.DatabaseKeywordsToKeywords(kw)
 	default:
 		utils.RespondWithError(w, http.StatusInternalServerError, "Unexpected data type")
 		return
 	}
 
-	// Create response with metadata
-	response := map[string]interface{}{
-		"keywords":     responseData,
-		"total_count":  totalCount,
-		"current_page": currentPage,
-		"total_pages":  totalPages,
-		"has_next":     hasNext,
-		"has_prev":     hasPrev,
+	// Filter by active status if specified
+	if strings.ToLower(active) == "true" {
+		responseData = filterActiveKeywords(responseData)
 	}
 
-	utils.RespondWithJSON(w, http.StatusOK, response)
+	utils.RespondWithJSON(w, http.StatusOK, responseData)
+}
+
+// Add keywords for a specific streamer
+func (apiCfg *ApiConfig) HandlerAddKeywords(w http.ResponseWriter, r *http.Request) {
+	streamerID, err := parseStreamerID(r)
+	if err != nil {
+		utils.RespondWithError(w, http.StatusBadRequest, fmt.Sprintf("Invalid streamer ID: %v", err))
+		return
+	}
+
+	var req struct {
+		Keywords []string `json:"keywords"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.RespondWithError(w, http.StatusBadRequest, fmt.Sprintf("Invalid payload: %v", err))
+		return
+	}
+
+	if len(req.Keywords) == 0 {
+		utils.RespondWithError(w, http.StatusBadRequest, "No keywords provided")
+		return
+	}
+
+	type AddedKeyword struct {
+		ID      int32  `json:"id"`
+		Keyword string `json:"keyword"`
+		Active  bool   `json:"active"`
+	}
+
+	var addedKeywords []AddedKeyword
+	for _, keyword := range req.Keywords {
+		keywordID, err := apiCfg.DB.UpsertKeyword(r.Context(), db.UpsertKeywordParams{
+			Keyword:    strings.ToLower(strings.TrimSpace(keyword)),
+			StreamerID: streamerID,
+		})
+		if err != nil {
+			log.Printf("Error upserting keyword '%s': %v", keyword, err)
+			continue
+		}
+
+		addedKeywords = append(addedKeywords, AddedKeyword{
+			ID:      keywordID,
+			Keyword: keyword,
+			Active:  true,
+		})
+	}
+
+	utils.RespondWithJSON(w, http.StatusCreated, addedKeywords)
 }
 
 func (apiCfg *ApiConfig) HandlerGetKeywordById(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "keywordId")
+	id := r.URL.Query().Get("keywordId")
 
 	correctId, err := strconv.Atoi(id)
 	if err != nil {
@@ -140,69 +201,10 @@ func (apiCfg *ApiConfig) HandlerGetKeywordById(w http.ResponseWriter, r *http.Re
 	utils.RespondWithJSON(w, 200, utils.DatabaseKeywordByIdToKeywordById(keyword))
 }
 
-func (apiCfg *ApiConfig) HandlerAddKeywords(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Keywords []string `json:"keywords"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		utils.RespondWithError(w, http.StatusBadRequest, fmt.Sprintf("Invalid payload %v", err))
-		return
-	}
-
-	if len(req.Keywords) == 0 {
-		utils.RespondWithError(w, http.StatusBadRequest, "No valid keywords provided")
-		return
-	}
-
-	keywordSet := make(map[string]struct{})
-	var uniqueKeywords []string
-	for _, kw := range req.Keywords {
-		kw = strings.TrimSpace(kw)
-		if kw == "" {
-			continue
-		}
-		kwLower := strings.ToLower(kw)
-		if _, exists := keywordSet[kwLower]; !exists {
-			keywordSet[kwLower] = struct{}{}
-			uniqueKeywords = append(uniqueKeywords, kw)
-		}
-	}
-
-	type AddedKeyword struct {
-		ID      int32  `json:"id"`
-		Keyword string `json:"keyword"`
-		Active  bool   `json:"active"`
-	}
-	var addedKeywords []AddedKeyword
-	for _, keyword := range uniqueKeywords {
-		keywordID, err := apiCfg.DB.UpsertKeyword(r.Context(), keyword)
-		if err != nil {
-			log.Printf("Error upserting keyword '%s': %v\n", keyword, err)
-			continue
-		}
-
-		utils.AddKeyword(keyword)
-
-		addedKeywords = append(addedKeywords, AddedKeyword{
-			ID:      keywordID,
-			Keyword: keyword,
-			Active:  true,
-		})
-	}
-
-	if len(addedKeywords) == 0 {
-		utils.RespondWithError(w, http.StatusInternalServerError, "Failed to add any keywords")
-		return
-	}
-	utils.RespondWithJSON(w, http.StatusCreated, addedKeywords)
-}
-
-func (apiCfg *ApiConfig) HandlerDeletKeyword(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+func (apiCfg *ApiConfig) HandlerDeleteKeyword(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
 	if err != nil {
-		utils.RespondWithError(w, 500, fmt.Sprintf("Failed to parse id from url params %v", err))
-		return
+		utils.RespondWithError(w, 500, fmt.Sprintf("Failed to parse id: %v", err))
 	}
 	keyword, err := apiCfg.DB.DeleteKeyword(r.Context(), int32(id))
 	if err != nil {
@@ -210,4 +212,53 @@ func (apiCfg *ApiConfig) HandlerDeletKeyword(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	utils.RespondWithJSON(w, http.StatusOK, keyword)
+}
+
+// Utility to parse streamer ID from request
+func parseStreamerID(r *http.Request) (int32, error) {
+	streamerIDStr := r.Header.Get("X-Streamer-ID") // Assume the streamer ID is passed in the header
+	streamerID, err := strconv.Atoi(streamerIDStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid streamer ID: %v", err)
+	}
+	return int32(streamerID), nil
+}
+
+// Utility to parse pagination parameters
+func parsePagination(r *http.Request) (limit, offset int, err error) {
+	limitStr := r.URL.Query().Get("limit")
+	offsetStr := r.URL.Query().Get("offset")
+
+	limit = 1000 // Default limit
+	offset = 0   // Default offset
+
+	if limitStr != "" {
+		limit, err = strconv.Atoi(limitStr)
+		if err != nil || limit <= 0 {
+			return 0, 0, fmt.Errorf("invalid 'limit' parameter")
+		}
+		if limit > 100 {
+			limit = 100 // Enforce maximum limit
+		}
+	}
+
+	if offsetStr != "" {
+		offset, err = strconv.Atoi(offsetStr)
+		if err != nil || offset < 0 {
+			return 0, 0, fmt.Errorf("invalid 'offset' parameter")
+		}
+	}
+
+	return limit, offset, nil
+}
+
+// Utility to filter active keywords
+func filterActiveKeywords(keywords []utils.GlobalKeywordsType) []utils.GlobalKeywordsType {
+	activeKeywords := []utils.GlobalKeywordsType{}
+	for _, keyword := range keywords {
+		if keyword.TotalCount > 0 {
+			activeKeywords = append(activeKeywords, keyword)
+		}
+	}
+	return activeKeywords
 }

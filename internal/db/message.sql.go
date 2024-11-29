@@ -8,29 +8,75 @@ package db
 import (
 	"context"
 	"database/sql"
+	"time"
 )
 
+const getMessagesByStreamer = `-- name: GetMessagesByStreamer :many
+SELECT id, user_id, keyword_id, streamer_id, count, last_message, updated_at, message_date FROM user_messages
+WHERE streamer_id = $1
+  AND message_date BETWEEN $2 AND $3
+`
+
+type GetMessagesByStreamerParams struct {
+	StreamerID    sql.NullInt32 `json:"streamer_id"`
+	MessageDate   time.Time     `json:"message_date"`
+	MessageDate_2 time.Time     `json:"message_date_2"`
+}
+
+func (q *Queries) GetMessagesByStreamer(ctx context.Context, arg GetMessagesByStreamerParams) ([]UserMessage, error) {
+	rows, err := q.db.QueryContext(ctx, getMessagesByStreamer, arg.StreamerID, arg.MessageDate, arg.MessageDate_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserMessage
+	for rows.Next() {
+		var i UserMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.KeywordID,
+			&i.StreamerID,
+			&i.Count,
+			&i.LastMessage,
+			&i.UpdatedAt,
+			&i.MessageDate,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertUserMessage = `-- name: UpsertUserMessage :exec
-INSERT INTO user_messages (user_id, keyword_id, count, last_message)
-VALUES ($1, $2, $3, $4)
-  ON CONFLICT (user_id, keyword_id) DO UPDATE
-  SET count = user_messages.count + EXCLUDED.count,
-  last_message = EXCLUDED.last_message,
-  updated_at = NOW()
+INSERT INTO user_messages (user_id, streamer_id, keyword_id, count, last_message, message_date)
+VALUES ($1, $2, $3, 1, $4, CURRENT_DATE)
+ON CONFLICT (user_id, keyword_id, streamer_id, message_date)
+DO UPDATE SET
+    count = user_messages.count + 1,
+    last_message = EXCLUDED.last_message,
+    updated_at = NOW()
 `
 
 type UpsertUserMessageParams struct {
 	UserID      sql.NullInt32  `json:"user_id"`
+	StreamerID  sql.NullInt32  `json:"streamer_id"`
 	KeywordID   sql.NullInt32  `json:"keyword_id"`
-	Count       sql.NullInt32  `json:"count"`
 	LastMessage sql.NullString `json:"last_message"`
 }
 
 func (q *Queries) UpsertUserMessage(ctx context.Context, arg UpsertUserMessageParams) error {
 	_, err := q.db.ExecContext(ctx, upsertUserMessage,
 		arg.UserID,
+		arg.StreamerID,
 		arg.KeywordID,
-		arg.Count,
 		arg.LastMessage,
 	)
 	return err

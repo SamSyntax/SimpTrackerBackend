@@ -8,6 +8,8 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"time"
 )
 
 const deleteKeyword = `-- name: DeleteKeyword :one
@@ -28,6 +30,50 @@ func (q *Queries) DeleteKeyword(ctx context.Context, id int32) (DeleteKeywordRow
 	return i, err
 }
 
+const getCountsPerUserPerKeywordById = `-- name: GetCountsPerUserPerKeywordById :one
+SELECT
+  u.id AS user_id,
+  u.username,
+  json_build_object(
+    'keywords', json_agg(
+      json_build_object(
+        'keyword_id', k.id,
+        'keyword', k.keyword,
+        'count', um.count
+      )
+    ),
+    'total_count', SUM(um.count),
+    'last_message', MAX(um.last_message),
+    'fav_word', 
+    (
+      SELECT k2.keyword
+      FROM user_messages um2
+      JOIN keywords k2 ON um2.keyword_id = k2.id
+      WHERE um2.user_id = u.id
+      ORDER BY um2.count DESC
+      LIMIT 1
+    )
+  ) AS stats
+FROM users u
+JOIN user_messages um ON um.user_id = u.id
+JOIN keywords k ON um.keyword_id = k.id
+WHERE u.id = $1
+GROUP BY u.id, u.username
+`
+
+type GetCountsPerUserPerKeywordByIdRow struct {
+	UserID   int32           `json:"user_id"`
+	Username string          `json:"username"`
+	Stats    json.RawMessage `json:"stats"`
+}
+
+func (q *Queries) GetCountsPerUserPerKeywordById(ctx context.Context, id int32) (GetCountsPerUserPerKeywordByIdRow, error) {
+	row := q.db.QueryRowContext(ctx, getCountsPerUserPerKeywordById, id)
+	var i GetCountsPerUserPerKeywordByIdRow
+	err := row.Scan(&i.UserID, &i.Username, &i.Stats)
+	return i, err
+}
+
 const getGlobalKeywordsCount = `-- name: GetGlobalKeywordsCount :many
 SELECT
   k.id AS keyword_id,
@@ -38,11 +84,17 @@ FROM
   keywords k
 LEFT JOIN
   user_messages um ON um.keyword_id = k.id
+  AND um.message_date BETWEEN $1 AND $2
+WHERE k.streamer_id = $3
 GROUP BY
   k.id, k.keyword, k.active
-ORDER BY
-  k.id ASC
 `
+
+type GetGlobalKeywordsCountParams struct {
+	MessageDate   time.Time `json:"message_date"`
+	MessageDate_2 time.Time `json:"message_date_2"`
+	StreamerID    int32     `json:"streamer_id"`
+}
 
 type GetGlobalKeywordsCountRow struct {
 	KeywordID  int32         `json:"keyword_id"`
@@ -51,8 +103,8 @@ type GetGlobalKeywordsCountRow struct {
 	TotalCount sql.NullInt64 `json:"total_count"`
 }
 
-func (q *Queries) GetGlobalKeywordsCount(ctx context.Context) ([]GetGlobalKeywordsCountRow, error) {
-	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCount)
+func (q *Queries) GetGlobalKeywordsCount(ctx context.Context, arg GetGlobalKeywordsCountParams) ([]GetGlobalKeywordsCountRow, error) {
+	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCount, arg.MessageDate, arg.MessageDate_2, arg.StreamerID)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +140,8 @@ SELECT
 FROM
   keywords k
 LEFT JOIN
-  user_messages um ON um.keyword_id = k.id
+  user_messages um
+  ON um.keyword_id = k.id
 GROUP BY
   k.id, k.keyword, k.active
 ORDER BY
@@ -139,17 +192,23 @@ SELECT
 FROM
   keywords k
 LEFT JOIN
-  user_messages um ON um.keyword_id = k.id
+  user_messages um
+  ON um.keyword_id = k.id AND um.streamer_id = $1
+WHERE
+  um.message_date BETWEEN $2 AND $3
 GROUP BY
   k.id, k.keyword, k.active
 ORDER BY
   total_count ASC
-LIMIT $1 OFFSET $2
+LIMIT $4 OFFSET $5
 `
 
 type GetGlobalKeywordsCountAscPaginatedParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+	StreamerID    sql.NullInt32 `json:"streamer_id"`
+	MessageDate   time.Time     `json:"message_date"`
+	MessageDate_2 time.Time     `json:"message_date_2"`
+	Limit         int32         `json:"limit"`
+	Offset        int32         `json:"offset"`
 }
 
 type GetGlobalKeywordsCountAscPaginatedRow struct {
@@ -160,7 +219,13 @@ type GetGlobalKeywordsCountAscPaginatedRow struct {
 }
 
 func (q *Queries) GetGlobalKeywordsCountAscPaginated(ctx context.Context, arg GetGlobalKeywordsCountAscPaginatedParams) ([]GetGlobalKeywordsCountAscPaginatedRow, error) {
-	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCountAscPaginated, arg.Limit, arg.Offset)
+	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCountAscPaginated,
+		arg.StreamerID,
+		arg.MessageDate,
+		arg.MessageDate_2,
+		arg.Limit,
+		arg.Offset,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -192,16 +257,22 @@ SELECT
   k.id AS keyword_id,
   k.keyword,
   k.active,
-  COALESCE(SUM(um.count), 0) AS total_count -- Using COALESCE to handle NULL
+  COALESCE(SUM(um.count), 0) AS total_count
 FROM
   keywords k
 LEFT JOIN
   user_messages um ON um.keyword_id = k.id
+  AND um.message_date BETWEEN $1 AND $2
 GROUP BY
   k.id, k.keyword, k.active
 ORDER BY
   total_count DESC
 `
+
+type GetGlobalKeywordsCountDescParams struct {
+	MessageDate   time.Time `json:"message_date"`
+	MessageDate_2 time.Time `json:"message_date_2"`
+}
 
 type GetGlobalKeywordsCountDescRow struct {
 	KeywordID  int32         `json:"keyword_id"`
@@ -210,8 +281,8 @@ type GetGlobalKeywordsCountDescRow struct {
 	TotalCount sql.NullInt64 `json:"total_count"`
 }
 
-func (q *Queries) GetGlobalKeywordsCountDesc(ctx context.Context) ([]GetGlobalKeywordsCountDescRow, error) {
-	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCountDesc)
+func (q *Queries) GetGlobalKeywordsCountDesc(ctx context.Context, arg GetGlobalKeywordsCountDescParams) ([]GetGlobalKeywordsCountDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCountDesc, arg.MessageDate, arg.MessageDate_2)
 	if err != nil {
 		return nil, err
 	}
@@ -247,17 +318,23 @@ SELECT
 FROM
   keywords k
 LEFT JOIN
-  user_messages um ON um.keyword_id = k.id
+  user_messages um
+  ON um.keyword_id = k.id AND um.streamer_id = $1
+WHERE
+  um.message_date BETWEEN $2 AND $3
 GROUP BY
   k.id, k.keyword, k.active
 ORDER BY
   total_count DESC
-LIMIT $1 OFFSET $2
+LIMIT $4 OFFSET $5
 `
 
 type GetGlobalKeywordsCountDescPaginatedParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+	StreamerID    sql.NullInt32 `json:"streamer_id"`
+	MessageDate   time.Time     `json:"message_date"`
+	MessageDate_2 time.Time     `json:"message_date_2"`
+	Limit         int32         `json:"limit"`
+	Offset        int32         `json:"offset"`
 }
 
 type GetGlobalKeywordsCountDescPaginatedRow struct {
@@ -268,7 +345,13 @@ type GetGlobalKeywordsCountDescPaginatedRow struct {
 }
 
 func (q *Queries) GetGlobalKeywordsCountDescPaginated(ctx context.Context, arg GetGlobalKeywordsCountDescPaginatedParams) ([]GetGlobalKeywordsCountDescPaginatedRow, error) {
-	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCountDescPaginated, arg.Limit, arg.Offset)
+	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCountDescPaginated,
+		arg.StreamerID,
+		arg.MessageDate,
+		arg.MessageDate_2,
+		arg.Limit,
+		arg.Offset,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -304,17 +387,22 @@ SELECT
 FROM
   keywords k
 LEFT JOIN
-  user_messages um ON um.keyword_id = k.id
+  user_messages um
+  ON um.keyword_id = k.id
+WHERE
+  um.message_date BETWEEN $1 AND $2
 GROUP BY
   k.id, k.keyword, k.active
 ORDER BY
   k.id ASC
-LIMIT $1 OFFSET $2
+LIMIT $3 OFFSET $4
 `
 
 type GetGlobalKeywordsCountPaginatedParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+	MessageDate   time.Time `json:"message_date"`
+	MessageDate_2 time.Time `json:"message_date_2"`
+	Limit         int32     `json:"limit"`
+	Offset        int32     `json:"offset"`
 }
 
 type GetGlobalKeywordsCountPaginatedRow struct {
@@ -325,7 +413,12 @@ type GetGlobalKeywordsCountPaginatedRow struct {
 }
 
 func (q *Queries) GetGlobalKeywordsCountPaginated(ctx context.Context, arg GetGlobalKeywordsCountPaginatedParams) ([]GetGlobalKeywordsCountPaginatedRow, error) {
-	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCountPaginated, arg.Limit, arg.Offset)
+	rows, err := q.db.QueryContext(ctx, getGlobalKeywordsCountPaginated,
+		arg.MessageDate,
+		arg.MessageDate_2,
+		arg.Limit,
+		arg.Offset,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -352,51 +445,6 @@ func (q *Queries) GetGlobalKeywordsCountPaginated(ctx context.Context, arg GetGl
 	return items, nil
 }
 
-const getGlobalKeywordsCountTotal = `-- name: GetGlobalKeywordsCountTotal :one
-SELECT COUNT(*) FROM keywords
-`
-
-func (q *Queries) GetGlobalKeywordsCountTotal(ctx context.Context) (int64, error) {
-	row := q.db.QueryRowContext(ctx, getGlobalKeywordsCountTotal)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const getInactiveKeywords = `-- name: GetInactiveKeywords :many
-SELECT
-    id,
-    keyword,
-    active
-FROM
-    keywords
-WHERE
-    active = FALSE
-`
-
-func (q *Queries) GetInactiveKeywords(ctx context.Context) ([]Keyword, error) {
-	rows, err := q.db.QueryContext(ctx, getInactiveKeywords)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Keyword
-	for rows.Next() {
-		var i Keyword
-		if err := rows.Scan(&i.ID, &i.Keyword, &i.Active); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getKeywordById = `-- name: GetKeywordById :one
 SELECT 
   k.id AS keyword_id,
@@ -406,7 +454,8 @@ SELECT
 FROM
   keywords k
 LEFT JOIN
-  user_messages um ON um.keyword_id = k.id
+  user_messages um
+  ON um.keyword_id = k.id
 WHERE
   k.id = $1
 GROUP BY
@@ -432,7 +481,7 @@ func (q *Queries) GetKeywordById(ctx context.Context, id int32) (GetKeywordByIdR
 	return i, err
 }
 
-const getUsedKeywords = `-- name: GetUsedKeywords :many
+const getKeywordsByStreamer = `-- name: GetKeywordsByStreamer :many
 SELECT
   k.id AS keyword_id,
   k.keyword,
@@ -442,28 +491,36 @@ FROM
   keywords k
 LEFT JOIN
   user_messages um ON um.keyword_id = k.id
+  AND um.streamer_id = $1
+  AND um.message_date BETWEEN $2 AND $3
 GROUP BY
   k.id, k.keyword, k.active
 ORDER BY
-  total_count ASC
+  total_count DESC
 `
 
-type GetUsedKeywordsRow struct {
+type GetKeywordsByStreamerParams struct {
+	StreamerID    sql.NullInt32 `json:"streamer_id"`
+	MessageDate   time.Time     `json:"message_date"`
+	MessageDate_2 time.Time     `json:"message_date_2"`
+}
+
+type GetKeywordsByStreamerRow struct {
 	KeywordID  int32         `json:"keyword_id"`
 	Keyword    string        `json:"keyword"`
 	Active     bool          `json:"active"`
 	TotalCount sql.NullInt64 `json:"total_count"`
 }
 
-func (q *Queries) GetUsedKeywords(ctx context.Context) ([]GetUsedKeywordsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getUsedKeywords)
+func (q *Queries) GetKeywordsByStreamer(ctx context.Context, arg GetKeywordsByStreamerParams) ([]GetKeywordsByStreamerRow, error) {
+	rows, err := q.db.QueryContext(ctx, getKeywordsByStreamer, arg.StreamerID, arg.MessageDate, arg.MessageDate_2)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetUsedKeywordsRow
+	var items []GetKeywordsByStreamerRow
 	for rows.Next() {
-		var i GetUsedKeywordsRow
+		var i GetKeywordsByStreamerRow
 		if err := rows.Scan(
 			&i.KeywordID,
 			&i.Keyword,
@@ -483,31 +540,21 @@ func (q *Queries) GetUsedKeywords(ctx context.Context) ([]GetUsedKeywordsRow, er
 	return items, nil
 }
 
-const isKeywordActive = `-- name: IsKeywordActive :one
-SELECT
-  active
-FROM
-  keywords
-WHERE
-  id = $1
-`
-
-func (q *Queries) IsKeywordActive(ctx context.Context, id int32) (bool, error) {
-	row := q.db.QueryRowContext(ctx, isKeywordActive, id)
-	var active bool
-	err := row.Scan(&active)
-	return active, err
-}
-
 const upsertKeyword = `-- name: UpsertKeyword :one
-INSERT INTO keywords (keyword)
-VALUES ($1)
-ON CONFLICT (keyword) DO UPDATE SET keyword = EXCLUDED.keyword
+INSERT INTO keywords (streamer_id, keyword, active)
+VALUES ($1, $2, TRUE)
+ON CONFLICT (streamer_id, keyword) DO UPDATE SET
+    active = EXCLUDED.active
 RETURNING id
 `
 
-func (q *Queries) UpsertKeyword(ctx context.Context, keyword string) (int32, error) {
-	row := q.db.QueryRowContext(ctx, upsertKeyword, keyword)
+type UpsertKeywordParams struct {
+	StreamerID int32  `json:"streamer_id"`
+	Keyword    string `json:"keyword"`
+}
+
+func (q *Queries) UpsertKeyword(ctx context.Context, arg UpsertKeywordParams) (int32, error) {
+	row := q.db.QueryRowContext(ctx, upsertKeyword, arg.StreamerID, arg.Keyword)
 	var id int32
 	err := row.Scan(&id)
 	return id, err

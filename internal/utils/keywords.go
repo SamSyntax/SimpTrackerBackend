@@ -1,12 +1,22 @@
 package utils
 
-import "sync"
+import (
+	"database/sql"
+	"sync"
+)
 
 type Keyword struct {
 	ID      int32  `json:"id"`
 	Keyword string `json:"keyword"`
 	Active  bool   `json:"active"`
 	Count   int64  `json:"total_count"`
+}
+
+func NullishInt32(data int32) sql.NullInt32 {
+	return sql.NullInt32{
+		Int32: data,
+		Valid: true,
+	}
 }
 
 var (
