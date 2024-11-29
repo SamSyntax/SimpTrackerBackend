@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -55,9 +56,10 @@ func isTwitchStreamLive(clientID, accessToken, streamerName string) (bool, error
 	if err != nil {
 		return false, fmt.Errorf("failed to create request: %v", err)
 	}
+  fmt.Println("streamer:",streamerName)
 
 	query := url.Values{}
-	query.Add("user_login", "soserioussammyxd")
+	query.Add("user_login", streamerName)
 	req.URL.RawQuery = query.Encode()
 
 	req.Header.Set("Client-ID", clientID)
@@ -81,8 +83,11 @@ func isTwitchStreamLive(clientID, accessToken, streamerName string) (bool, error
 	if err := json.NewDecoder(resp.Body).Decode(&streamResp); err != nil {
 		return false, fmt.Errorf("failed to decode response: %v", err)
 	}
-
-	return len(streamResp.Data) > 0, nil
+	if strings.ToLower(os.Getenv("ENV")) == "dev" {
+		return true, nil
+	} else {
+		return len(streamResp.Data) > 0, nil
+	}
 }
 
 // Broadcast a message to all WebSocket clients

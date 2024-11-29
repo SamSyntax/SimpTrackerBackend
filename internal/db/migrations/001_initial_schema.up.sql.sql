@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS user_messages (
   user_id INTEGER REFERENCES users (id),
   keyword_id INTEGER REFERENCES keywords (id) ON DELETE CASCADE,
   streamer_id INTEGER REFERENCES streamers (id) ON DELETE CASCADE,
-  count INTEGER DEFAULT 1,
+  count INTEGER DEFAULT 0,
   last_message TEXT,
   updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
   message_date DATE NOT NULL DEFAULT CURRENT_DATE,

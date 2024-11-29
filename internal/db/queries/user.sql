@@ -1,7 +1,7 @@
 -- name: UpsertUser :one
 INSERT INTO users (username)
 VALUES ($1)
-ON CONFLICT (username) DO NOTHING
+ON CONFLICT (username) DO UPDATE SET username = EXCLUDED.username
 RETURNING id;
 
 -- name: GetUsersWithTotalCounts :many

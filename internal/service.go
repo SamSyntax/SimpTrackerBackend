@@ -24,8 +24,8 @@ func Service() {
 	}
 	initDB()
 	defer conn.Close()
-  fmt.Println(os.Getenv("BOT_USERNAME"), os.Getenv("TWITCH_OAUTH"))
-  client := twitch.NewClient(os.Getenv("BOT_USERNAME"), "oauth:"+os.Getenv("ACCESS_TOKEN"))
+	fmt.Println(os.Getenv("BOT_USERNAME"), os.Getenv("TWITCH_OAUTH"))
+	client := twitch.NewClient(os.Getenv("BOT_USERNAME"), "oauth:"+os.Getenv("ACCESS_TOKEN"))
 	var portString string = os.Getenv("PORT")
 
 	go handlers.StartWsServer(os.Getenv("CLIENT_ID"), os.Getenv("ACCESS_TOKEN"), "")
@@ -43,11 +43,12 @@ func Service() {
 	monitorStreamer(client)
 	client.OnPrivateMessage(func(msg twitch.PrivateMessage) {
 		// Fetch the streamer_id based on the channel
-		streamer, err := queries.GetStreamerByTwitchID(context.Background(), msg.Channel)
+		streamer, err := queries.GetStreamerByTwitchID(context.Background(), msg.RoomID)
 		if err != nil {
 			log.Printf("Error fetching streamer for channel %s: %v", msg.Channel, err)
 			return
 		}
+		fmt.Println(streamer.ID, streamer.TwitchID)
 
 		// Skip messages from StreamElements bot
 		if msg.User.DisplayName == "StreamElements" {

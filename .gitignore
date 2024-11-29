@@ -1,2 +1,5 @@
 .env
 .git
+exchange.sh
+Makefile
+dbsync.sh

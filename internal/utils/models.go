@@ -161,3 +161,21 @@ func DatabaseKeywordsToKeywordsDescPaginated(rows []db.GetGlobalKeywordsCountDes
 	}
 	return keywords
 }
+
+func DatabaseKeywordsToKeywordsPaginated(rows []db.GetGlobalKeywordsCountPaginatedRow) []GlobalKeywordsType {
+	var keywords []GlobalKeywordsType
+	for _, row := range rows {
+		totalCount := 0
+		if row.TotalCount.Valid {
+			totalCount = int(row.TotalCount.Int64)
+		}
+		keywords = append(keywords, GlobalKeywordsType{
+			KeywordID:  int(row.KeywordID),
+			Keyword:    row.Keyword,
+			Active:     row.Active,
+			TotalCount: totalCount,
+
+		})
+	}
+	return keywords
+}

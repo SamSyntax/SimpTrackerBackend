@@ -105,6 +105,13 @@ func (apiCfg *ApiConfig) HandlerGetKeywordsParams(w http.ResponseWriter, r *http
 			Offset:        int32(offset),
 			StreamerID:    utils.NullishInt32(streamerID),
 		})
+	case "":
+		keywords, err = apiCfg.DB.GetGlobalKeywordsCountPaginated(r.Context(), db.GetGlobalKeywordsCountPaginatedParams{
+			MessageDate:   startDate,
+			MessageDate_2: endDate,
+			Limit:         int32(limit),
+			Offset:        int32(offset),
+		})
 	default:
 		utils.RespondWithError(w, http.StatusBadRequest, "Invalid 'order' parameter")
 		return
@@ -122,6 +129,8 @@ func (apiCfg *ApiConfig) HandlerGetKeywordsParams(w http.ResponseWriter, r *http
 		responseData = utils.DatabaseKeywordsToKeywordsAscPaginated(kw)
 	case []db.GetGlobalKeywordsCountDescPaginatedRow:
 		responseData = utils.DatabaseKeywordsToKeywordsDescPaginated(kw)
+	case []db.GetGlobalKeywordsCountPaginatedRow:
+		responseData = utils.DatabaseKeywordsToKeywordsPaginated(kw)
 	default:
 		utils.RespondWithError(w, http.StatusInternalServerError, "Unexpected data type")
 		return
